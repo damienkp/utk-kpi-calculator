@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Campaign KPI Calculator</title>
+  <style>
+    /* Palette: UT Knoxville Tennessee Orange (#FF8200) and Smokey (#58595B family),
+       adjusted where needed so every text pairing meets WCAG AAA (7:1). */
+    :root {
+      --orange: #FF8200;
+      --ink: #1A1A1A;          /* body text */
+      --muted: #4A4B4D;        /* secondary text (darkened Smokey) */
+      --bg: #F4F4F4;
+      --card: #FFFFFF;
+      --line: #6B6C6E;         /* borders on form controls (3:1+ against white) */
+      --error-bg: #FDECEA;
+      --error-ink: #5A0010;
+      --error-line: #B00020;
+      --focus: #1A1A1A;
+    }
+
+    * { box-sizing: border-box; }
+
+    html { -webkit-text-size-adjust: 100%; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Alright Sans", -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                   "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      font-size: 1.125rem;     /* 18px; scales with user text-size settings */
+      line-height: 1.5;
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    header {
+      background: var(--card);
+      border-top: 10px solid var(--orange);
+      border-bottom: 1px solid #D0D0D0;
+      padding: 1.25rem 1rem;
+    }
+    .wrap { max-width: 44rem; margin: 0 auto; }
+
+    h1, h2 {
+      font-family: "Alegreya", Georgia, "Times New Roman", serif;
+      line-height: 1.2;
+      margin: 0;
+    }
+    h1 { font-size: 2rem; }
+    h2 { font-size: 1.5rem; margin-bottom: .75rem; }
+    .sub { color: var(--muted); margin: .5rem 0 0; }
+
+    main { padding: 1.25rem 1rem 2rem; }
+
+    .card {
+      background: var(--card);
+      border: 1px solid #D0D0D0;
+      border-radius: 12px;
+      padding: 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .field { margin-bottom: 1.1rem; }
+    label { display: block; font-weight: 700; margin-bottom: .25rem; }
+    .hint { display: block; color: var(--muted); font-size: 1rem; margin-bottom: .35rem; }
+
+    input {
+      width: 100%;
+      min-height: 48px;                 /* above Apple's 44pt minimum touch target */
+      font: inherit;
+      font-size: 1.125rem;              /* 16px+ prevents iOS zoom on focus */
+      color: var(--ink);
+      background: #fff;
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      padding: .5rem .75rem;
+    }
+    input[aria-invalid="true"] {
+      border-color: var(--error-line);
+      border-width: 3px;
+    }
+    .field-error {
+      color: var(--error-ink);
+      font-weight: 700;
+      margin: .35rem 0 0;
+    }
+
+    .buttons { display: flex; flex-wrap: wrap; gap: .75rem; margin-top: 1.5rem; }
+    button {
+      flex: 1 1 10rem;
+      min-height: 48px;
+      font: inherit;
+      font-weight: 700;
+      border-radius: 8px;
+      padding: .6rem 1.25rem;
+      cursor: pointer;
+    }
+    #calcBtn { background: var(--orange); color: #000; border: 2px solid #000; }
+    #resetBtn { background: #fff; color: var(--ink); border: 2px solid var(--ink); }
+    #calcBtn:hover { background: #FFA040; }
+    #resetBtn:hover { background: #EDEDED; }
+
+    :focus-visible {
+      outline: 4px solid var(--focus);
+      outline-offset: 3px;
+      box-shadow: 0 0 0 7px #fff;       /* keeps the ring visible on any background */
+    }
+
+    #message {
+      display: none;
+      background: var(--error-bg);
+      color: var(--error-ink);
+      border: 3px solid var(--error-line);
+      border-radius: 8px;
+      padding: .9rem 1rem;
+      margin-bottom: 1.25rem;
+    }
+    #message.show { display: block; }
+    #message strong { display: block; margin-bottom: .25rem; }
+    #message ul { margin: .25rem 0 0; padding-left: 1.25rem; }
+
+    .results { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin: 0; }
+    .result {
+      border: 1px solid #D0D0D0;
+      border-left: 8px solid var(--orange);
+      border-radius: 8px;
+      padding: .75rem 1rem;
+    }
+    .result dt { color: var(--muted); font-size: 1rem; margin: 0; }
+    .result dd { font-size: 1.75rem; font-weight: 700; margin: .1rem 0 0; }
+
+    .note { color: var(--muted); font-size: 1rem; margin: 1rem 0 0; }
+
+    @media (max-width: 34rem) {
+      h1 { font-size: 1.65rem; }
+      .results { grid-template-columns: 1fr; }
+      .card { padding: 1rem; }
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      button { transition: background-color .15s ease; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="wrap">
+      <h1>Campaign KPI Calculator</h1>
+      <p class="sub">Enter your campaign data and select Calculate.</p>
+    </div>
+  </header>
+
+  <main class="wrap">
+
+    <!-- On-page message area; replaces the old pop-up alert -->
+    <div id="message" role="alert" tabindex="-1"></div>
+
+    <form id="kpiForm" class="card" novalidate>
+      <h2>Campaign data</h2>
+
+      <div class="field">
+        <label for="impressions">Impressions</label>
+        <span class="hint" id="impressions-hint">Times your content was shown. Must be greater than 0.</span>
+        <input type="number" id="impressions" inputmode="decimal" min="0" step="any"
+               aria-describedby="impressions-hint impressions-err">
+        <p class="field-error" id="impressions-err" hidden></p>
+      </div>
+
+      <div class="field">
+        <label for="clicks">Clicks</label>
+        <span class="hint" id="clicks-hint">Total clicks on your content. Must be greater than 0.</span>
+        <input type="number" id="clicks" inputmode="decimal" min="0" step="any"
+               aria-describedby="clicks-hint clicks-err">
+        <p class="field-error" id="clicks-err" hidden></p>
+      </div>
+
+      <div class="field">
+        <label for="engagements">Engagements</label>
+        <span class="hint" id="engagements-hint">Likes, comments, shares, and similar actions. Must be greater than 0.</span>
+        <input type="number" id="engagements" inputmode="decimal" min="0" step="any"
+               aria-describedby="engagements-hint engagements-err">
+        <p class="field-error" id="engagements-err" hidden></p>
+      </div>
+
+      <div class="field">
+        <label for="cost">Campaign cost (US dollars)</label>
+        <span class="hint" id="cost-hint">Total spend. Enter 0 or more, without the $ sign.</span>
+        <input type="number" id="cost" inputmode="decimal" min="0" step="any"
+               aria-describedby="cost-hint cost-err">
+        <p class="field-error" id="cost-err" hidden></p>
+      </div>
+
+      <div class="buttons">
+        <button type="submit" id="calcBtn">Calculate</button>
+        <button type="button" id="resetBtn">Reset</button>
+      </div>
+    </form>
+
+    <section class="card" aria-labelledby="results-h">
+      <h2 id="results-h">Results</h2>
+      <dl class="results" aria-live="polite">
+        <div class="result"><dt>Click-through rate</dt><dd id="ctr">&mdash;</dd></div>
+        <div class="result"><dt>Engagement rate</dt><dd id="er">&mdash;</dd></div>
+        <div class="result"><dt>Cost per click</dt><dd id="cpc">&mdash;</dd></div>
+        <div class="result"><dt>Cost per engagement</dt><dd id="cpe">&mdash;</dd></div>
+      </dl>
+      <p class="note">These numbers are a starting point. You decide what they mean for your campaign and what to do next.</p>
+    </section>
+
+  </main>
+
+  <script>
+    var fields = [
+      { id: "impressions", name: "Impressions", mustBePositive: true },
+      { id: "clicks", name: "Clicks", mustBePositive: true },
+      { id: "engagements", name: "Engagements", mustBePositive: true },
+      { id: "cost", name: "Campaign cost", mustBePositive: false }
+    ];
+    var resultIds = ["ctr", "er", "cpc", "cpe"];
+    var dash = "—";
+
+    var money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+    function pct(n) { return n.toFixed(2) + "%"; }
+
+    function clearResults() {
+      resultIds.forEach(function (id) { document.getElementById(id).textContent = dash; });
+    }
+
+    function clearErrors() {
+      var box = document.getElementById("message");
+      box.className = "";
+      box.innerHTML = "";
+      fields.forEach(function (f) {
+        var input = document.getElementById(f.id);
+        var err = document.getElementById(f.id + "-err");
+        input.removeAttribute("aria-invalid");
+        err.hidden = true;
+        err.textContent = "";
+      });
+    }
+
+    function validate(f) {
+      var raw = document.getElementById(f.id).value.trim();
+      if (raw === "") return f.name + " is required. Enter a number.";
+      var n = Number(raw);
+      if (!isFinite(n)) return f.name + " must be a number.";
+      if (n < 0) return f.name + " cannot be negative.";
+      if (f.mustBePositive && n === 0) return f.name + " must be greater than 0.";
+      return "";
+    }
+
+    document.getElementById("kpiForm").addEventListener("submit", function (e) {
+      e.preventDefault();
+      clearErrors();
+
+      var problems = [];
+      var firstBad = null;
+      fields.forEach(function (f) {
+        var msg = validate(f);
+        if (msg) {
+          problems.push(msg);
+          var input = document.getElementById(f.id);
+          var err = document.getElementById(f.id + "-err");
+          input.setAttribute("aria-invalid", "true");
+          err.textContent = msg;
+          err.hidden = false;
+          if (!firstBad) firstBad = input;
+        }
+      });
+
+      if (problems.length) {
+        clearResults();
+        var box = document.getElementById("message");
+        box.innerHTML = "<strong>Please fix the following:</strong><ul>" +
+          problems.map(function (p) { return "<li>" + p + "</li>"; }).join("") + "</ul>";
+        box.className = "show";
+        firstBad.focus();
+        return;
+      }
+
+      var imp = Number(document.getElementById("impressions").value);
+      var clk = Number(document.getElementById("clicks").value);
+      var eng = Number(document.getElementById("engagements").value);
+      var cost = Number(document.getElementById("cost").value);
+
+      document.getElementById("ctr").textContent = pct(clk / imp * 100);
+      document.getElementById("er").textContent = pct(eng / imp * 100);
+      document.getElementById("cpc").textContent = money.format(cost / clk);
+      document.getElementById("cpe").textContent = money.format(cost / eng);
+    });
+
+    document.getElementById("resetBtn").addEventListener("click", function () {
+      document.getElementById("kpiForm").reset();
+      clearErrors();
+      clearResults();
+      document.getElementById("impressions").focus();
+    });
+  </script>
+
+</body>
+</html>
